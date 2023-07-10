@@ -1,0 +1,14 @@
+server:
+  port: 8006
+spring:
+  application:
+    name: consul-provider-service
+  cloud:
+    consul:
+      host: 192.168.157.200
+      port: 8500
+      discovery:
+        service-name: ${spring.application.name}  # 指定注册对外暴露的服务名称
+        health-check-interval: 10s  # 多久检查一次
+        heartbeat:
+          enabled: true  # 确保开启，不开起的话consul上服务是打叉的
