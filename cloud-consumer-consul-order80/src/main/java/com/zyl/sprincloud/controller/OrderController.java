@@ -11,7 +11,7 @@ import javax.annotation.Resource;
 @RequestMapping("consumer")
 public class OrderController {
 
-    // zookeeper服务中心的服务名称
+    // consul服务中心的服务名称
     public static final String INVOKE_URL = "http://consul-provider-service";
 
     @Resource
