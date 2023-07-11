@@ -155,11 +155,30 @@ public class OrderController {
 ## cloud-consumer-zk-order80
 模块概述：订单服务，注册到zookeeper。
 
+注意包版本的问题:
+如果 zookeeper 的版本和导入的jar包版本不一致，启动就会报错，由zk-discovery和zk之间的jar包冲突的问题
+解决这种冲突:需要在 pom 文件中，排除掉引起冲突的jar包，添加和服务器zookeeper版本一致的 jar 包
+```xml
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-zookeeper-discovery</artifactId>
+    <exclusions>
+        <exclusion>
+            <groupId>org.apache.zookeeper</groupId>
+            <artifactId>zookeeper</artifactId>
+        </exclusion>
+    </exclusions>
+</dependency>
+<dependency>
+    <groupId>org.apache.zookeeper</groupId>
+    <artifactId>zookeeper</artifactId>
+    <version>3.8.0</version>
+</dependency>
+```
+
 ## cloud-provider-zk-payment8004
 模块概述：支付服务，注册到zookeeper。
 
-### zookeeper
-zookeeper是一个分布式协调工具，可以实现注册中心功能
 
 ## cloud-consumer-consul-order80
 模块概述：订单服务，注册到consul
