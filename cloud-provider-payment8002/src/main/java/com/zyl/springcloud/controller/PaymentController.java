@@ -47,7 +47,7 @@ public class PaymentController {
         return new CommonResult(444, "没有对应id的记录", null);
     }
 
-    @GetMapping("/customer/discovery")
+    @GetMapping("/consumer/discovery")
     public Object discovery(){
         //获得服务清单列表
         List<String> services = discoveryClient.getServices();
@@ -61,5 +61,10 @@ public class PaymentController {
                     + "\t" + serviceInstance.getPort() + "\t" + serviceInstance.getUri());
         }
         return this.discoveryClient;
+    }
+
+    @GetMapping("/payment/lb")
+    public String testMyLoadBalancer() {
+        return serverPort;
     }
 }

@@ -12,6 +12,10 @@ spring:
     username: root
     password: 123456
 
+  cloud:
+    inetutils:
+      ignored-interfaces: ['VMware.*']  # 注册到Eureka上的服务，注册的IP是虚拟机的IP的解决方案
+
 mybatis:
   mapper-locations: classpath:mapper/*.xml
   type-aliases-package: com.zyl.springcloud.entities

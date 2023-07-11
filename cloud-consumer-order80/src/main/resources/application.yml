@@ -5,6 +5,10 @@ spring:
   application:
     name: cloud-order-service  # 项目名,也是注册的名字
 
+  cloud:
+    inetutils:
+      ignored-interfaces: [ 'VMware.*' ]  # 注册到Eureka上的服务，注册的IP是虚拟机的IP的解决方案
+
 eureka:
   client:
     # 注册进 Eureka 的服务中心
