@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
 import java.util.List;
+import java.util.Timer;
 
 @RestController   //必须是这个注解，因为是模拟前后端分离的restful风格的请求，要求每个方法返回 json
 @Slf4j
@@ -65,6 +66,19 @@ public class PaymentController {
 
     @GetMapping("/payment/lb")
     public String testMyLoadBalancer() {
+        return serverPort;
+    }
+
+
+    // 测试ribbon超时
+    @GetMapping("/payment/feign/timeout")
+    public String testTimeout(){
+        try {
+            Thread.sleep(3000);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
         return serverPort;
     }
 

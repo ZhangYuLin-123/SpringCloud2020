@@ -67,4 +67,17 @@ public class PaymentController {
     public String testMyLoadBalancer() {
         return serverPort;
     }
+
+
+    // 测试ribbon超时
+    @GetMapping("/payment/feign/timeout")
+    public String testTimeout(){
+        try {
+            Thread.sleep(3000);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
+        return serverPort;
+    }
 }
