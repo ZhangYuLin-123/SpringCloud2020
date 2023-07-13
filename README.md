@@ -250,3 +250,10 @@ public class FeignConfig {
     }
 }
 ```
+application.yml配置：
+```yml
+logging:
+  level:
+    # feign日志以什么级别监控哪个接口
+    com.zyl.springcloud.service.OrderFeignService: debug
+```
