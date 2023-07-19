@@ -257,3 +257,235 @@ logging:
     # feign日志以什么级别监控哪个接口
     com.zyl.springcloud.service.OrderFeignService: debug
 ```
+
+## cloud-consumer-feign-hystrix-order80
+模块概述：服务注册到eureka，使用feign调用**cloud-provider-hystrix-payment8001**中的服务，@FeignClient中配置fallback进行服务降级
+
+### 服务降级
+服务降级，客户端去调用服务端，碰上服务端宕机或关闭。
+本次案例降级处理是在客户端80实现完成的，与服务端8001没有关系。只需要为Feign客户端定义的接口添加一个服务降级处理的实现类即可实现解耦。
+
+#### feign + fallback
+重要依赖：
+```
+<!--openfeign  自带feign-hystrix  自带ribbon-->
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-openfeign</artifactId>
+</dependency>
+```
+PaymentHystrixService:通过feign调用服务提供者的方法，配置fallback进行降级处理
+```
+@Component
+// FeignFallback 客户端的服务降级 针对 CLOUD-PROVIDER-HYSTRIX-PAYMENT 该服务 提供了一个 对应的服务降级类
+@FeignClient(value = "CLOUD-PROVIDER-HYSTRIX-PAYMENT", fallback = PaymentFallbackServiceImpl.class)
+// @FeignClient(value = "CLOUD-PROVIDER-HYSTRIX-PAYMENT")
+public interface PaymentHystrixService {
+    @GetMapping("/payment/hystrix/{id}")
+    String paymentInfoOK(@PathVariable("id") Integer id);
+
+    @GetMapping("/payment/hystrix/timeout/{id}")
+    String paymentInfoTimeOut(@PathVariable("id") Integer id);
+}
+```
+PaymentFallbackServiceImpl：PaymentHystrixService接口实现类，里面是服务降级后的兜底方案
+```
+@Component
+public class PaymentFallbackServiceImpl implements PaymentHystrixService {
+    @Override
+    public String paymentInfoOK(Integer id) {
+        return "PaymentFallbackService fall back-paymentInfo_OK ,o(╥﹏╥)o";
+    }
+
+    @Override
+    public String paymentInfoTimeOut(Integer id) {
+        return "PaymentFallbackService fall back-paymentInfo_TimeOut ,o(╥﹏╥)o";
+    }
+
+}
+```
+application.yml:
+```
+server:
+  port: 80
+
+spring:
+  application:
+    name: cloud-order-service  # 项目名,也是注册的名字
+
+  cloud:
+    inetutils:
+      ignored-interfaces: [ 'VMware.*' ]  # 注册到Eureka上的服务，注册的IP是虚拟机的IP的解决方案
+
+eureka:
+  client:
+    # 注册进 Eureka 的服务中心
+    register-with-eureka: true
+    # 检索 服务中心 的其它服务
+    fetch-registry: true
+    service-url:
+      # 设置与 Eureka Server 交互的地址
+      # defaultZone: http://localhost:7001/eureka/ # 注册中心为单机时
+      defaultZone: http://eureka7001.com:7001/eureka/,http://eureka7002.com:7002/eureka/  # 注册中心为集群时
+  instance: #重点，和client平行
+    instance-id: order80 # 每个提供者的id不同，显示的不再是默认的项目名
+    prefer-ip-address: true # 可以显示ip地址
+    # Eureka客户端向服务端发送心跳的时间间隔，单位s，默认30s
+    lease-renewal-interval-in-seconds: 1
+    # Rureka服务端在收到最后一次心跳后等待时间上线，单位为s，默认90s，超时将剔除服务
+    lease-expiration-duration-in-seconds: 2
+
+
+#设置feign客户端超时时间(OpenFeign默认支持ribbon)
+ribbon:
+  #指的是建立连接所用的时间，适用于网络状况正常的情况下,两端连接所用的时间
+  ReadTimeout: 5000
+  #指的是建立连接后从服务器读取到可用资源所用的时间
+  ConnectTimeout: 5000
+
+logging:
+  level:
+    # feign日志以什么级别监控哪个接口
+    com.zyl.springcloud.service.OrderFeignService: debug
+
+
+# 用于服务降级 在注解@FeignClient 中添加 fallback 属性值
+feign:
+  hystrix:
+    enabled: true
+
+# 注解@FeignClient 中添加 fallback 属性值，但默认超时时间为1秒（如果调用生产者的服务超过1秒则直接fallback）
+hystrix:
+  command:
+    default:
+      execution:
+        timeout:
+          enable: true  # 默认值   为false则超时控制有ribbon控制，为true则hystrix超时和ribbon超时都是用，但是谁小谁生效
+        isolation:
+          thread:
+            timeoutInMilliseconds: 5000
+```
+
+
+## cloud-provider-hystrix-payment8001
+模块概述：服务注册到eureka，提供方法供**cloud-consumer-feign-hystrix-order80**调用，改模块中部分方法进行了熔断处理
+
+### 降级
+@HystrixCommand降级可以放在服务提供端，也可以放在消费端，但一般放在消费端
+```
+@Service
+@Slf4j
+public class PaymentService {
+    /**
+     * 正常访问
+     * @param id
+     * @return
+     */
+    public String paymentinfo_Ok(Integer id){
+        return "线程池：" + Thread.currentThread().getName() + "--paymentInfo_OK，id:" + id;
+    }
+
+    /**
+     * 超时访问，设置自身调用超时的峰值，峰值内正常运行，超过了峰值需要服务降级 自动调用fallbackMethod 指定的方法
+     * 超时异常或者运行异常 都会进行服务降级
+     * @param id
+     * @return
+     */
+    @HystrixCommand(fallbackMethod = "paymentinfo_Timeout_Handler", commandProperties = {
+            @HystrixProperty(name = "execution.isolation.thread.timeoutInMilliseconds", value = "4000")
+    })
+    public String paymentinfo_Timeout(Integer id){
+        int interTime = 3;
+        // int age = 10/0;  // 演示报错
+        try{
+            TimeUnit.SECONDS.sleep(interTime);  // 模拟超时
+        }catch (Exception e){
+            e.printStackTrace();
+        }
+        log.info("hystrix payment service!!!");
+        return "线程池：" + Thread.currentThread().getName() + "--paymentInfo_Timeout，id:" + id +
+                "耗时" + interTime + "秒钟--";
+    }
+
+    /**
+     * paymentinfo_Timeout 方法失败后 自动调用此方法 实现服务降级 告知调用者 paymentinfo_Timeout 目前无法正常调用
+     * @param id
+     * @return
+     */
+    public String paymentinfo_Timeout_Handler(Integer id){
+        return "线程池:  " + Thread.currentThread().getName() + "  paymentInfoTimeOutHandler8001系统繁忙或者运行报错，请稍后再试,id:  " + id + "\t"
+                + "o(╥﹏╥)o";
+    }
+}
+```
+### 熔断
+服务雪崩：
+多个微服务之间调用的时候，假设微服务A调用微服务B和微服务C，微服务B和微服务C有调用其他的微服务，这就是所谓的”扇出”，如扇出的链路上某个微服务的调用响应式过长或者不可用，对微服务A的调用就会占用越来越多的系统资源，进而引起系统雪崩，所谓的”雪崩效应”
+
+Hystrix：
+Hystrix是一个用于分布式系统的延迟和容错的开源库。在分布式系统里，许多依赖不可避免的调用失败，比如超时、异常等，Hystrix能够保证在一个依赖出问题的情况下，不会导致整个服务失败，避免级联故障，以提高分布式系统的弹性。
+
+断路器：
+“断路器”本身是一种开关装置，当某个服务单元发生故障监控(类似熔断保险丝)，向调用方法返回一个符合预期的、可处理的备选响应(FallBack)，而不是长时间的等待或者抛出调用方法无法处理的异常，这样就保证了服务调用方的线程不会被长时间、不必要地占用，从而避免了故障在分布式系统中的蔓延。乃至雪崩。
+
+服务熔断：
+熔断机制是应对雪崩效应的一种微服务链路保护机制，当扇出链路的某个微服务不可用或者响应时间太长时，会进行服务的降级，进而熔断该节点微服务的调用，快速返回”错误”的响应信息。
+当检测到该节点微服务响应正常后恢复调用链路，在SpringCloud框架机制通过Hystrix实现，Hystrix会监控微服务见调用的状况，当失败的调用到一个阈值，默认是5秒内20次调用失败就会启动熔断机制，熔断机制的注解是@HystrixCommand
+
+
+熔断的状态：
+* 熔断打开：请求不再进行调用当前服务，内部设置时钟一般为MTTR（平均故障处理时间），当打开时长达到所设时钟则进入半熔断状态
+* 熔断关闭：熔断关闭不会对服务进行熔断
+* 熔断半开：部分请求根据规则调用当前服务，如果请求成功目符合规则，则认为当前服务恢复正常，关闭熔断
+
+#### 熔断案例
+PaymentService:
+```
+@Service
+@Slf4j
+public class PaymentService {
+    /**
+     * 服务熔断 超时、异常、都会触发熔断
+     * 1、默认是最近10秒内收到不小于10个请求
+     * 2、并且有60%是失败的
+     * 3、就开启断路器
+     * 4、开启后所有请求不再转发，降级逻辑自动切换为主逻辑，减小调用方的响应时间
+     * 5、经过一段时间（时间窗口期，默认是5秒），断路器变为半开状态，会让其中一个请求进行转发
+     *      5.1、如果成功，断路器会关闭
+     *      5.2、若失败，继续开启。重复4和5
+     *
+     * @param id
+     * @return
+     */
+    @HystrixCommand(fallbackMethod = "paymentCircuitBreakerFallback", commandProperties = {
+            @HystrixProperty(name = "circuitBreaker.enabled", value = "true"),  // 是否开启断路器
+            @HystrixProperty(name = "circuitBreaker.requestVolumeThreshold", value = "10"),  // 请求次数
+            @HystrixProperty(name = "circuitBreaker.sleepWindowInMilliseconds", value = "10000"),  // 时间窗口期
+            @HystrixProperty(name = "circuitBreaker.errorThresholdPercentage", value = "60"),  // 失败率达到多少后跳闸
+    })
+    public String paymentCircuitBreaker(Integer id) {
+        if (id < 0) {
+            throw new RuntimeException("******id 不能负数");
+        }
+
+        String serialNumber = IdUtil.simpleUUID();
+        return Thread.currentThread().getName() + "\t" + "调用成功，流水号: " + serialNumber;
+    }
+
+
+    /**
+     * paymentCircuitBreaker 方法的 fallback
+     * 当断路器开启时，主逻辑熔断降级，该 fallback 方法就会替换原 paymentCircuitBreaker 方法，处理请求
+     *
+     * @param id
+     * @return
+     */
+    public String paymentCircuitBreakerFallback(Integer id) {
+        return "fallback----------" + Thread.currentThread().getName() + "\t" + "id 不能负数或超时或自身错误，请稍后再试  id: " + id;
+    }
+}
+```
+涉及到断路器的三个重要参数快照时间窗、请求总数阀值、错误百分比阀值
+1：快照时间窗：断路器确定是否打开需要统计一些请求和错误数据而统计的时间范围就是快照时间窗，默认为最近的10秒。
+2：请求总数阀值：在快照时间窗内，必须满足请求总数阀值才有资格熔断。默认为20，意味着在10秒内，如果该hystrix命令的调用次数不足20次，即使所有的请求都超时或具他原因失败，断路器都不会打开。
+3：错误百分比阀值：当请求总数在快照时间窗内超过了阀值，上日发生了30次调用，如果在这30次调用中，有15次发生了超时异常，也就是超过50％的错误百分比，在默认设定50％阀值情况，这时候就会将断路器打开。
