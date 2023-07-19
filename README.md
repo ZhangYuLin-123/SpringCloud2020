@@ -489,3 +489,45 @@ public class PaymentService {
 1：快照时间窗：断路器确定是否打开需要统计一些请求和错误数据而统计的时间范围就是快照时间窗，默认为最近的10秒。
 2：请求总数阀值：在快照时间窗内，必须满足请求总数阀值才有资格熔断。默认为20，意味着在10秒内，如果该hystrix命令的调用次数不足20次，即使所有的请求都超时或具他原因失败，断路器都不会打开。
 3：错误百分比阀值：当请求总数在快照时间窗内超过了阀值，上日发生了30次调用，如果在这30次调用中，有15次发生了超时异常，也就是超过50％的错误百分比，在默认设定50％阀值情况，这时候就会将断路器打开。
+
+
+## cloud-hystrix-dashboard9001
+模块概述：利用Hystrix调用监控(HystrixDashboard)，监控**cloud-provider-hystrix-payment8001**中的服务被调用的情况
+
+对模块cloud-provider-hystrix-payment8001的调整：
+```java
+@SpringBootApplication
+@EnableEurekaClient
+//注解开启断路器功能
+@EnableCircuitBreaker
+public class HystrixPaymentMain8001 {
+    public static void main(String[] args) {
+        SpringApplication.run(HystrixPaymentMain8001.class, args);
+    }
+
+    /**
+     * 注意：新版本Hystrix需要在主启动类中指定监控路径
+     * 此配置是为了服务监控而配置，与服务容错本身无关，spring cloud升级后的坑
+     * ServletRegistrationBean因为springboot的默认路径不是"/hystrix.stream"，
+     * 只要在自己的项目里配置上下面的servlet就可以了
+     *
+     * @return ServletRegistrationBean
+     */
+    @Bean
+    public ServletRegistrationBean getServlet() {
+        HystrixMetricsStreamServlet streamServlet = new HystrixMetricsStreamServlet();
+        ServletRegistrationBean registrationBean = new ServletRegistrationBean(streamServlet);
+
+        // 一启动就加载
+        registrationBean.setLoadOnStartup(1);
+        // 添加url
+        registrationBean.addUrlMappings("/hystrix.stream");
+        // 设置名称
+        registrationBean.setName("HystrixMetricsStreamServlet");
+        return registrationBean;
+    }
+}
+```
+
+启动测试：访问 http://ocalhost:9001/hystrix，
+对8001进行监控：输入 http://localhost:8001/hystrix.stream
