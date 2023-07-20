@@ -1,0 +1,44 @@
+server:
+  port: 9527
+spring:
+  application:
+    name: cloud-gateway
+  ## GateWay配置
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: true # 开启从注册中心动态创建路由的功能，利用微服务名进行路由
+
+      routes: # 可配多个路由
+        - id: payment_route  # 路由ID ， 没有固定的规则但要求唯一，建议配合服务名
+          # uri: http://localhost:8001  # 匹配后提供服务的路由地址 #uri+predicates  # 要访问这个路径得先经过9527处理
+          uri: lb://CLOUD-PAYMENT-SERVICE # lb 属于GateWay 的关键字，代表是动态uri，即代表使用的是服务注册中心的微服务名，它默认开启使用负载均衡机制
+          predicates:
+            - Path=/payment/lb/**  # 断言，路径相匹配的进行路由
+            #- After=2020-02-21T15:51:37.485+08:00[Asia/Shanghai]
+            #- Cookie=username,kangkang # Cookie校验   模拟请求验证：curl http://localhost:9527/payment/lb --cookie "username=kangkang"
+            #- Header=X-Request-Id, \d+  # 请求头要有X-Request-Id属性并且值为整数的正则表达式
+
+
+    inetutils:
+      ignored-interfaces: ['VMware.*']  # 注册到Eureka上的服务，注册的IP是虚拟机的IP的解决方案
+
+# 注册进 eureka Server # 网关他本身也是一个微服务，也要注册进注册主中心
+eureka:
+  client:
+    # 注册进 Eureka 的服务中心
+    register-with-eureka: true
+    # 检索 服务中心 的其它服务
+    fetch-registry: true
+    service-url:
+      # 设置与 Eureka Server 交互的地址
+      # defaultZone: http://localhost:7001/eureka/ # 注册中心为单机时
+      defaultZone: http://eureka7001.com:7001/eureka/,http://eureka7002.com:7002/eureka/  # 注册中心为集群时
+  instance: #重点，和client平行
+    instance-id: gateway9527 # 每个提供者的id不同，显示的不再是默认的项目名
+    prefer-ip-address: true # 可以显示ip地址
+    # Eureka客户端向服务端发送心跳的时间间隔，单位s，默认30s
+    lease-renewal-interval-in-seconds: 1
+    # Rureka服务端在收到最后一次心跳后等待时间上线，单位为s，默认90s，超时将剔除服务
+    lease-expiration-duration-in-seconds: 2
