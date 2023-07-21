@@ -531,3 +531,106 @@ public class HystrixPaymentMain8001 {
 
 启动测试：访问 http://ocalhost:9001/hystrix，
 对8001进行监控：输入 http://localhost:8001/hystrix.stream
+
+
+
+## cloud-gateway-gateway9527
+模块概述：gateway网关，注册到eureka，在application.yml中进行路由配置，路由匹配后访问**cloud-provider-payment8001**或**cloud-provider-payment8002**中的服务（负载均衡）
+
+### GateWay的三大核心概念：
+* Route(路由）：路由是构建网关的基本模块，它由ID、目标URI、一系列的断言和过滤器组成，如果断言为true则匹配该路由
+* Predicate(断言）：参考的是Java8的java.util.function.predicate。开发人员可以匹配HTTP请求中的所有内容（例如请求头或请求参数），如果请求与断言相匹配则进行路由
+匹配条件
+* Filter(过滤）：指的是spring框架中GatewayFilter的实例，使用过滤器，可以在请求被路由前或者之后对请求进行修改。
+
+### 路由配置的两种方式：
+* 配置文件中进行配置  application.yml
+```
+spring:
+  application:
+    name: cloud-gateway
+  ## GateWay配置
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: true # 开启从注册中心动态创建路由的功能，利用微服务名进行路由
+
+      routes: # 可配多个路由
+        - id: payment_route  # 路由ID ， 没有固定的规则但要求唯一，建议配合服务名
+          # uri: http://localhost:8001  # 匹配后提供服务的路由地址 #uri+predicates  # 要访问这个路径得先经过9527处理
+          uri: lb://CLOUD-PAYMENT-SERVICE # lb 属于GateWay 的关键字，代表是动态uri，即代表使用的是服务注册中心的微服务名，它默认开启使用负载均衡机制
+          predicates:
+            - Path=/payment/lb/**  # 断言，路径相匹配的进行路由
+            #- After=2020-02-21T15:51:37.485+08:00[Asia/Shanghai]
+            #- Cookie=username,kangkang # Cookie校验   模拟请求验证：curl http://localhost:9527/payment/lb --cookie "username=kangkang"
+            #- Header=X-Request-Id, \d+  # 请求头要有X-Request-Id属性并且值为整数的正则表达式
+```
+* 使用代码进行配置
+```
+@Configuration
+public class GatewayConfig {
+    @Bean
+    public RouteLocator customRouteLocator(RouteLocatorBuilder routeLocatorBuilder){
+        RouteLocatorBuilder.Builder routes = routeLocatorBuilder.routes();
+
+        // 分别是id，本地址，转发到的地址
+        routes.route("path_route_test",
+                r -> r.path("/bk").uri("https://www.cnblogs.com/")
+        ).build();
+
+        return routes.build();
+    }
+}
+```
+
+动态配置：
+这里所谓的动态配置就是利用服务注册中心，来实现 负载均衡 的调用 多个微服务。
+默认情况下gateway会根据注册中心注册的服务列表，以注册中心上微服务名为路径创建动态路由进行转发，从而实现动态路由的功能
+注意，这是GateWay 的负载均衡
+
+### Gateway:Predicate
+1 After Route Predicate
+2 Before Route Predicate
+3 Between Route Predicate
+4 Cookie Route Predicate
+5 Header Route Predicate
+6 Host Route Predicate
+7 Method Route Predicate
+8 Path Route Predicate
+9 Query Route Predicate
+
+### Gateway:Filter
+过滤器可能会在发送代理请求之前（Pre）或之后（post）执行业务逻辑
+Filter在pre类型的过滤器可以做**参数校验**，**权限校验**，**流量监听**，**日志输出**，**协议转换**等
+在post类型的过滤器中可以做响应内容、响应头的修改，日志的输出，流量监控等有着非常重要的作用
+
+例子：
+```
+@Component
+@Slf4j
+public class MyLogGatewayFilter implements GlobalFilter, Ordered {
+
+    @Override
+    public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+        log.info("***********come in MyLogGatewayFilter:  " + new Date());
+
+        // 获取请求参数中的 uname
+        String username = exchange.getRequest().getQueryParams().getFirst("username");
+
+        if (username == null) {
+            log.info("*******用户名为null，非法用户，o(╥﹏╥)o");
+            exchange.getResponse().setStatusCode(HttpStatus.NOT_ACCEPTABLE);
+            return exchange.getResponse().setComplete();
+        }
+
+        return chain.filter(exchange);
+    }
+
+    @Override
+    public int getOrder() {
+        return 0;
+    }
+}
+```
+
