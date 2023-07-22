@@ -673,7 +673,7 @@ SpringCloud Config分为服务端和客户端两部分。
 > * 生产环境：config-pro.yml
 > * 测试环境：config-test.tml
 
-启动微服务3344，访问 http://config-3344.com:3344/master/config-dev.yml 文件（注意，要提前在git上弄一个这文件）
+启动微服务3344，访问 http://localhost:3344/master/config-dev.yml 文件（注意，要提前在git上弄一个这文件）
 
 ## cloud-config-client3355
 模块概述：配置消费端（使用 Config Server 统一配置文件的项目），从**cloud-config-center3344**中拿配置，服务注册到eureka
