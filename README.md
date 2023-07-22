@@ -634,3 +634,116 @@ public class MyLogGatewayFilter implements GlobalFilter, Ordered {
 }
 ```
 
+## cloud-config-center3344
+模块概述：SpringCloud Config 分布式配置中心，注册到eureka
+
+### SpringCloud Config概述
+微服务意味着要将单应用中的业务拆分成一个个子服务，每个服务的粒度相对较小，因此系统中会出现大量的服务。由于每个服务都需要必要的配置信息才能运行，所以一套集中式的、动态的配置管理设施是必不可少的。
+
+springCloud提供了ConfigServer来解决这个问题，我们每一个微服务自己带着一个application.yml，上百个配置文件的管理。比如数据库的信息，我们可以写到一个统一的地方。
+
+* config + bus
+* alibaba nacos
+* 携程 阿波罗
+
+SpringCloud Config是什么：Spring Cloud Config为微服务架构中的微服务提供集中化的外部配置支持，配置服务器为各个不同微服务应用的所有环境提供了一个中心化的外部配置。
+
+
+#### 怎么玩：
+SpringCloud Config分为服务端和客户端两部分。
+* 服务端也称为分布式配置中心，它是一个独立的微服务应用，用来连接配置服务器并为客户端提供获取配置信息，加密/解密信息等访问接口
+* 客户端则是通过指定的配置中心来管理应用资源，以及与业务相关的配置内容，并在启动的时候从配置中心取和加载配置信息配置服务器默认采用git来存储配置信息，这样就有助于对环境配置进行版本管理，并且可以通过git客户端工具来方便的管理和访问配置内容
+
+#### 能干嘛：
+
+集中管理配置文件
+* 不同环境不同配置，动态化的配置更新，分环境部署比如dev/test/prod/beta/release
+* 运行期间动态调整配置，不再需要在每个服务部署的机器上编写配置文件，服务会向配置中心统一拉取配置自己的信息
+* 当配置发生变动时，服务不需要重启即可感知到配置的变化并应用新的配置
+* 将配置信息以REST接囗的形式暴露
+
+
+
+#### config服务端配置
+这个服务端指的是消费端与github之间的桥接
+
+> 首先在github上新建一个仓库 springcloud-config
+> 在git根目录下创建
+> * 开发环境：config-dev.yml
+> * 生产环境：config-pro.yml
+> * 测试环境：config-test.tml
+
+启动微服务3344，访问 http://config-3344.com:3344/master/config-dev.yml 文件（注意，要提前在git上弄一个这文件）
+
+## cloud-config-client3355
+模块概述：配置消费端（使用 Config Server 统一配置文件的项目），从**cloud-config-center3344**中拿配置，服务注册到eureka
+
+**springcloud-config client配置文件为什么要用bootstrap命名？**
+> 这是由spring boot的加载属性文件的优先级决定的，想要在加载属性之前去spring cloud config server上取配置文件，那spring cloud config相关配置就是需要最先加载的，而bootstrap的加载是先于application的，所以config client要配置config的相关配置就只能写到bootstrap里了
+
+### 从config-center获取配置
+1. 启动Config配置中心3344微服务并自测，启动3355作为client访问 localhost:3355/configInfo
+
+2. 修改config-dev.yml配置文件并提交到github中，比如加个变量age或者版本号version
+
+3. 访问http://localhost:3344/master/config-dev.yml发现配置取得到最新的
+
+4. 访问http://localhost:3355/configInfo发现配置还是旧的
+
+5. 所有有必要配置动态刷新
+
+### 动态刷新
+
+#### 问题：
+Linux运维修改GitHub上的配置文件内容做调整：比如修改config-dev.yml提交
+* 刷新3344，发现ConfigServer服务端配置中心立刻响应，得到最新值了
+* 刷新3355，发现ConfigClient客户端没有任何响应，拿到的还是旧值
+* 客户端3355没有变化除非自己重启或者重新加载，才能拿到最新值
+> 就是github上面配置更新了，config Server 项目上是动态更新的，但是，client端的项目中的配置，目前还是之前的，它不能动态更新，必须重启才行。
+
+#### 动态刷新问题解决：
+
+1. client端一定要有actuator依赖：
+```
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-actuator</artifactId>
+</dependency>
+```
+
+2. client 端增加 yml 配置如下，即在 bootstrap.yml 文件中：
+```
+# 暴露监控端点
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+```
+3. 在controller 上添加注解@RefreshScope：
+```
+@RestController
+@RefreshScope //这个注解
+public class ConfigClientController {
+    @Value("${config.info}")
+    private String configInfo;
+
+    @GetMapping("/configInfo")
+    public String getConfigInfo() {
+        return configInfo;
+    }
+}
+```
+到此为止，配置已经完成，但是测试客户端 localhost:3355/configInfo 仍然不能动态刷新，还是旧值（也就是说环境变量里的还是旧值），需要下一步。
+
+4. 向 client 端发送一个 POST 请求
+>如 curl -X POST “http://localhost:3355/actuator/refresh”
+>两个必须：1.必须是 POST 请求，2.请求地址：http://localhost:3355/actuator/refresh
+
+四步操作后 成功获得到最新值
+
+#### 还存在的问题：
+* 要向每个微服务客户端发送一次POST请求，当微服务数量庞大，又是一个新的问题。
+* 能否广播，一次通知，处处生效？（还要求不要全广播，差异化管理，定点清除，20台只有18台更新）
+* 就有下面的消息总线！
+

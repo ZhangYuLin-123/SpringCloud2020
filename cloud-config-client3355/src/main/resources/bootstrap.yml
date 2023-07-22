@@ -1,0 +1,41 @@
+server:
+  port: 3355
+
+spring:
+  application:
+    name: cloud-config-client  # 项目名,也是注册的名字
+  cloud:
+    inetutils:
+      ignored-interfaces: ['VMware.*']  # 注册到Eureka上的服务，注册的IP是虚拟机的IP的解决方案
+
+    config:
+      label: master #分支名称
+      name: config #配置文件名称，文件也可以是client-config-dev.yml这种格式的，这里就写 client-config
+      profile: dev #读取后缀名称   上述3个综合：master分支上config-dev.yml的配置文件被读取http://localhost:3344/master/config-dev.yml
+      uri: http://localhost:3344 #配置中心地址
+      # 综合上面四个 即读取配置文件地址为： http://localhost:3344/master/config-dev.yml
+
+eureka:
+  client:
+    # 注册进 Eureka 的服务中心
+    register-with-eureka: true
+    # 检索 服务中心 的其它服务
+    fetch-registry: true
+    service-url:
+      # 设置与 Eureka Server 交互的地址
+      # defaultZone: http://localhost:7001/eureka/ # 注册中心为单机时
+      defaultZone: http://eureka7001.com:7001/eureka/,http://eureka7002.com:7002/eureka/  # 注册中心为集群时
+  instance: #重点，和client平行
+    instance-id: configClient3355 # 每个提供者的id不同，显示的不再是默认的项目名
+    prefer-ip-address: true # 可以显示ip地址
+    # Eureka客户端向服务端发送心跳的时间间隔，单位s，默认30s
+    lease-renewal-interval-in-seconds: 1
+    # Rureka服务端在收到最后一次心跳后等待时间上线，单位为s，默认90s，超时将剔除服务
+    lease-expiration-duration-in-seconds: 2
+
+# 暴露监控端点
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
