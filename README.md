@@ -675,7 +675,7 @@ SpringCloud Config分为服务端和客户端两部分。
 
 启动微服务3344，访问 http://localhost:3344/master/config-dev.yml 文件（注意，要提前在git上弄一个这文件）
 
-## cloud-config-client3355
+## cloud-config-client3355、cloud-config-client3366
 模块概述：配置消费端（使用 Config Server 统一配置文件的项目），从**cloud-config-center3344**中拿配置，服务注册到eureka
 
 **springcloud-config client配置文件为什么要用bootstrap命名？**
@@ -762,7 +762,7 @@ ConfigClient实例都监听MQ中同一个topic主题(默认是springCloud Bus)�
 0. RabbitMQ下载安装配置
 1. 给**cloud-config-center-3344**配置中心服务端添加消息总线支持
 添加依赖：
-```java
+```
 <!-- 添加rabbitMQ的消息总线支持包 -->
 <dependency>
     <groupId>org.springframework.cloud</groupId>
@@ -789,7 +789,7 @@ management:
 ```
 2. 给**cloud-config-client3355**客户端添加消息总线支持
 添加依赖：
-```java
+```
 <!-- 添加rabbitMQ的消息总线支持包 -->
 <dependency>
     <groupId>org.springframework.cloud</groupId>
