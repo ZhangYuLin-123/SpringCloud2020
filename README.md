@@ -747,3 +747,75 @@ public class ConfigClientController {
 * 能否广播，一次通知，处处生效？（还要求不要全广播，差异化管理，定点清除，20台只有18台更新）
 * 就有下面的消息总线！
 
+### 消息总线BUS
+* spring cloud Bus配置spring cloud Config使用可以实现配置的动态刷新
+* spring cloud bus是用来将分布式系统的节点与轻量级消息系统链接起来的框架，它整合了java的事件处理机制和消息中间件的功能。
+* spring cloud bus目前支持RabbitMQ和Kafka（因为是主题订阅）
+
+#### 什么是总线
+在微服务架构的系统中，通常会使用轻量级的消息代理来构建一个共用的消息主题，并让系统中所有微服务实例都连接上来。由于该主题中产生的消息会被所有实例监听和消费，所以称它为消息总线。在总线上的各个实例，都可以方便地广播一些需要让貝他连接在该主题上的实例都知道的消息。
+
+#### 基本原理
+ConfigClient实例都监听MQ中同一个topic主题(默认是springCloud Bus)。当一个服务刷新数据的时候，它会把这个信息放入到Topic中，这样其它监听同一topic的服务就能得到通知，然后去更新自身的配置
+
+#### 广播式刷新配置
+0. RabbitMQ下载安装配置
+1. 给**cloud-config-center-3344**配置中心服务端添加消息总线支持
+添加依赖：
+```java
+<!-- 添加rabbitMQ的消息总线支持包 -->
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-bus-amqp</artifactId>
+</dependency>
+
+```
+新增配置：
+```
+# rabbitMq的相关配置
+spring:        
+  rabbitmq:
+    host: localhost
+    port: 5672  # 这里没错，虽然rabbitMQ网页是 15672
+    username: guest
+    password: guest
+# rabbitmq 的相关配置2 暴露bus刷新配置的端点
+management:
+  endpoints:
+    web:
+      exposure:
+        include: 'bus-refresh'
+
+```
+2. 给**cloud-config-client3355**客户端添加消息总线支持
+添加依赖：
+```java
+<!-- 添加rabbitMQ的消息总线支持包 -->
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-bus-amqp</artifactId>
+</dependency>
+
+```
+添加配置：
+```
+spring:        
+  rabbitmq:
+    host: localhost
+    port: 5672  # 这里没错，虽然rabbitMQ网页是 15672
+    username: guest
+    password: guest
+```
+
+3. 给**cloud-config-client3366**客户端添加消息总线支持（以3355为模板）
+
+4. 修改git上的配置文件，比如master分支上的config-dev.yml文件
+5. 刷新http://localhost:3344/master/config-dev.yml，可以看到配置已经更新
+6. 刷新http://localhost:3355/configInfo或者http://localhost:3366/configInfo发现配置还是旧的
+7. 执行curl -X POST “http://localhost:3344/actuator/bus-refresh”刷新全部client配置，访问http://localhost:3355/configInfo或者http://localhost:3366/configInfo发现配置已经是最新的了
+8. 测试定点通知
+   * 新的需求：指定具体某一个实例（的参数）生效而不是全部，一些是最新值，一些是旧值
+   * 公式：http://localhost:配置中心的端口号/actuator/bus-refresh/{destination}
+   * 例子：curl -X POST "http://localhost:3344/actuator/bus-refresh/CLOUD-CONFIG-CLIENT:3355"  即微服务名称+端囗号
+   * /bus/refresh请求不再发送到具体的服务实例上，而是发给configCenter并通过destination参数类指定需要更新配置的服务或实例
+   * 我们这里以刷新运行在3355端口上的config-client为例飞，发现只通知3355 不通知3366

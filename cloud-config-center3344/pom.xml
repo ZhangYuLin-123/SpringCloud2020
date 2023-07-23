@@ -17,6 +17,12 @@
     </properties>
 
     <dependencies>
+        <!-- 添加rabbitMQ的消息总线支持包 -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-bus-amqp</artifactId>
+        </dependency>
+
         <!-- config Server -->
         <dependency>
             <groupId>org.springframework.cloud</groupId>
