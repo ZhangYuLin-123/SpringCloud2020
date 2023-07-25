@@ -1,5 +1,5 @@
 server:
-  port: 8802
+  port: 8803
 
 spring:
   application:
@@ -38,7 +38,7 @@ eureka:
       # defaultZone: http://localhost:7001/eureka/ # 注册中心为单机时
       defaultZone: http://eureka7001.com:7001/eureka/,http://eureka7002.com:7002/eureka/  # 注册中心为集群时
   instance: #重点，和client平行
-    instance-id: streamReceiver8802 # 每个提供者的id不同，显示的不再是默认的项目名
+    instance-id: streamReceiver8803 # 每个提供者的id不同，显示的不再是默认的项目名
     prefer-ip-address: true # 可以显示ip地址
     # Eureka客户端向服务端发送心跳的时间间隔，单位s，默认30s
     lease-renewal-interval-in-seconds: 1

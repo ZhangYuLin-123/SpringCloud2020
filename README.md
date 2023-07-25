@@ -819,3 +819,83 @@ spring:
    * 例子：curl -X POST "http://localhost:3344/actuator/bus-refresh/CLOUD-CONFIG-CLIENT:3355"  即微服务名称+端囗号
    * /bus/refresh请求不再发送到具体的服务实例上，而是发给configCenter并通过destination参数类指定需要更新配置的服务或实例
    * 我们这里以刷新运行在3355端口上的config-client为例飞，发现只通知3355 不通知3366
+
+
+## cloud-stream-rabbitmq-provider8801
+模块简介：消息发送模块，服务注册到eureka
+
+消息发送：
+```java
+@Slf4j
+// 不是和controller打交道的service,而是发送消息的推送服务类
+@EnableBinding(Source.class)  // 定义消息的推送管道
+public class MessageProviderImpl implements IMessageProvider {
+
+    @Resource
+    private MessageChannel output;  // 消息发送管道
+
+    @Override
+    public String send() {
+        String serial = UUID.randomUUID().toString();
+        output.send(MessageBuilder.withPayload(serial).build());
+        log.info("******serial: " + serial);
+        return serial;
+    }
+}
+```
+
+## cloud-stream-rabbitmq-consumer8802/8803
+模块简介：消息接受模块，服务注册到eureka
+
+消息接收：
+```java
+@Slf4j
+@Component
+@EnableBinding(Sink.class)
+public class ReceiverController {
+
+    @Value("${server.port}")
+    private String serverPort;
+
+    @StreamListener(Sink.INPUT) // 消费者
+    public void input(Message<String> message){
+        System.out.println("消费者2号，serverport: " + serverPort + "，接受到的消息：" + message.getPayload());
+    }
+
+}
+```
+
+### 消息重复消费问题
+当没有配置group属性时，8801发送消息，8802和8803两个服务都接受得到
+
+原因分析：8801发送的消息，放到了两个不同的queue（队列）里面
+
+解决方法：8802和8803两个服务都配置相同的group属性（公共的队列：studyExchange.testG
+）
+```
+spring:
+  application:
+    name: cloud-stream-receiver
+  cloud:
+    stream:
+      binders: # 在此配置要绑定的rabbitMQ的服务信息
+        defaultRabbit: # 表示定义的名称，用于和binding整合
+          type: rabbit  # 消息组件类型
+          environment:  # 设置rabbitmq的相关环境配置
+            spring:
+              rabbitmq:
+                host: localhost
+                port: 5672
+                username: guest
+                password: guest
+      bindings:  # 服务的整合处理
+        input: # 表示是消费者，这里是唯一和生产者不同的地方，向rabbitMQ发送消息
+          destination: studyExchange  # 表示要使用的Exchange名称
+          content-type: application/json  # 设置消息类型，本次是json，文本是 "text/plain"
+          binder: defaultRabbit  # 设置要绑定的消息服务的具体配置
+          group: testG
+```
+
+### 消息持久化问题
+当没有配置group属性时，关闭8802和8803的服务，8801发送消息，启动8802和8803都不会接受到消息
+当配置了group属性后，关闭8802和8803的服务，8801发送消息，启动8802和8803时可以接受到消息
