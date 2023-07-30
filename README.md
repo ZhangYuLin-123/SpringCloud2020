@@ -899,3 +899,98 @@ spring:
 ### 消息持久化问题
 当没有配置group属性时，关闭8802和8803的服务，8801发送消息，启动8802和8803都不会接受到消息
 当配置了group属性后，关闭8802和8803的服务，8801发送消息，启动8802和8803时可以接受到消息
+
+
+## cloudalibaba-provider-payment9001/9002
+模块概述：服务注册到nacos，供**cloudalibaba-consumer-nacos-order83**调用
+
+Nacos = Eureka + Config + Bus
+> 替代Eureka做服务注册中心
+> 替代Config做服务配置中心
+
+
+## cloudalibaba-consumer-nacos-order83
+模块概述：服务注册到nacos，调用cloudalibaba-provider-payment9001/9002中的服务(nacos依赖中自带负载均衡相关依赖：netflix-ribbon)
+
+## cloudalibaba-config-nacos-client3377
+模块概述：nacos作为服务注册中心和配置中心
+
+重要依赖：
+```xml
+    <dependency>
+        <groupId>com.alibaba.cloud</groupId>
+        <artifactId>spring-cloud-starter-alibaba-nacos-config</artifactId>
+    </dependency>
+ 
+    <!-- springcloud alibaba nacos 依赖 -->
+    <dependency>
+        <groupId>com.alibaba.cloud</groupId>
+        <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
+    </dependency>
+```
+bootstrap.yml 配置：
+```
+# nacos配置
+server:
+  port: 3377
+
+spring:
+  application:
+    name: nacos-config-client
+  cloud:
+    nacos:
+      discovery:
+        server-addr: localhost:8848 #Nacos服务注册中心地址
+      config:
+        server-addr: localhost:8848 #Nacos作为配置中心地址
+        file-extension: yaml #指定yaml格式的配置
+        group: DEV_GROUP
+        namespace: 7d8f0f5a-6a53-4785-9686-dd460158e5d4
+
+    inetutils:
+      ignored-interfaces: [ 'VMware.*' ]
+```
+
+application.yml:
+```
+spring:
+  profiles:
+    active: dev # 表示开发环境
+    #active: test # 表示测试环境
+```
+controller:
+```java
+@RestController
+@RefreshScope  //支持Nacos的动态刷新
+public class ConfigClientController {
+
+    @Value("${config.info}") // 从nacos中取
+    private String configInfo;
+
+    @GetMapping("/configclient/getconfiginfo")
+    public String getConfigInfo(){
+        return configInfo;
+    }
+}
+
+```
+> nacos同springcloud-config一样，在项目初始化时，要先从配置中心进行配置拉取，拉取配置之后，才能保证项目的正常启动。
+>springboot的配置文件的加载是存在优先熟悉怒的，bootstrap优先级高于application。（bootstrap中放共性，application中放个性）
+
+nacos中的dataid的组成格式及与springboot配置文件中的匹配规则：
+
+```
+${prefix}-${spring.profiles.active}.${file-extension}
+```
+* prefix 默认为 spring.application.name 的值，也可以通过配置项 spring.cloud.nacos.config.prefix来配置。
+* spring.profiles.active 即为当前环境对应的 profile。 注意：当 spring.profiles.active 为空时，对应的连接符 - 也将不存在，dataId 的拼接格式变成 ${prefix}.${file-extension}
+* file-exetension 为配置内容的数据格式，可以通过配置项 spring.cloud.nacos.config.file-extension 来配置。目前只支持 properties 和 yaml 类型。（注意nacos里必须使用yaml）
+从上面可以看到重要的一点，配置文件的名称第二项，spring.profiles.active 是依据当前环境的profile属性值的，也就是这个值如果是 dev，即开发环境，它就会读取 dev 的配置信息，如果是test，测试环境，它就会读取test的配置信息，就是从 spring.profile.active 值获取当前应该读取哪个环境下的配置信息。
+
+所以要配置spring.profiles.active，新建application.yml文件，添加如下配置：
+```
+spring:
+  profiles:
+    active: dev # 表示开发环境
+```
+命名举例：nacos-config-client-dev.yaml，其中nacos-config-client是配置文件中的服务名
